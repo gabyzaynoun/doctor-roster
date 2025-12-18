@@ -9,8 +9,8 @@ sqlalchemy==2.0.36
 alembic==1.14.0
 aiosqlite==0.20.0
 
-# PostgreSQL (uncomment for Supabase/production)
-# psycopg2-binary==2.9.10
+# PostgreSQL (for Vercel/Supabase/production)
+psycopg2-binary==2.9.10
 
 # Authentication
 bcrypt==4.2.0

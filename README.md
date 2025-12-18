@@ -107,6 +107,81 @@ npm run lint     # Run ESLint
 |--------|-----------|---------------------|
 | GET    | /health   | Health check        |
 
+## Deployment
+
+### Option 1: Railway (Easiest - Keeps SQLite)
+
+Railway supports persistent storage, so you can keep using SQLite without migrating to PostgreSQL.
+
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Deploy backend
+cd backend
+railway login
+railway init
+railway up
+
+# Deploy frontend
+cd ../frontend
+railway init
+railway up
+```
+
+Set environment variables in Railway Dashboard:
+- `SECRET_KEY` - Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`
+- `CORS_ORIGINS` - Your frontend Railway URL
+
+### Option 2: Render (SQLite with Persistent Disk)
+
+Render offers persistent disks for SQLite databases.
+
+1. Push your code to GitHub
+2. Go to [render.com](https://render.com) and create a new "Blueprint"
+3. Connect your repo - Render will detect `render.yaml` and deploy both services
+
+### Option 3: Vercel (Requires PostgreSQL)
+
+Vercel's serverless functions don't have persistent storage, so SQLite won't work. You'll need PostgreSQL.
+
+#### Deploy Backend
+```bash
+cd backend
+vercel
+```
+
+Set up a PostgreSQL database ([Vercel Postgres](https://vercel.com/docs/storage/vercel-postgres), [Supabase](https://supabase.com/), or [Neon](https://neon.tech/)) and configure:
+```
+DATABASE_URL=postgresql://...
+SECRET_KEY=your-secure-secret-key
+APP_ENV=production
+CORS_ORIGINS=https://your-frontend.vercel.app
+```
+
+#### Deploy Frontend
+```bash
+cd frontend
+vercel
+```
+
+Set: `BACKEND_URL=https://your-backend.vercel.app`
+
+### Environment Variables
+
+#### Backend
+| Variable | Description | Example |
+|----------|-------------|---------|
+| DATABASE_URL | Database connection string | `sqlite:///./doctor_roster.db` |
+| SECRET_KEY | JWT signing key | `your-32-char-secret` |
+| APP_ENV | Environment mode | `production` |
+| CORS_ORIGINS | Allowed origins | `https://app.example.com` |
+
+#### Frontend
+| Variable | Description | Example |
+|----------|-------------|---------|
+| VITE_API_URL | Backend API URL (optional) | `https://api.example.com` |
+
 ## License
 
 Proprietary - Internal use only.
