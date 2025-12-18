@@ -1,4 +1,5 @@
 # Frontend Dockerfile - Multi-stage build
+# Cache bust: v2 - dynamic PORT support
 
 # Build stage
 FROM node:20-alpine AS builder
