@@ -1,8 +1,0 @@
-# Railway/Nixpacks config for Python FastAPI
-providers = ["python"]
-
-[phases.install]
-cmds = ["pip install -r requirements.txt"]
-
-[start]
-cmd = "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
