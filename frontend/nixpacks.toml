@@ -1,0 +1,8 @@
+# Railway/Nixpacks config for Vite static site
+providers = ["node"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"
