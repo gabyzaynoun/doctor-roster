@@ -1,0 +1,21 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic[email]==2.10.3
+pydantic-settings==2.6.1
+python-dotenv==1.0.1
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+aiosqlite==0.20.0
+
+# PostgreSQL (uncomment for Supabase/production)
+# psycopg2-binary==2.9.10
+
+# Authentication
+bcrypt==4.2.0
+python-jose[cryptography]==3.5.0
+python-multipart==0.0.18
+
+# Utilities
+python-dateutil==2.9.0
