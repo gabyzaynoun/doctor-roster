@@ -1,6 +1,9 @@
 # Backend Dockerfile
 FROM python:3.11-slim
 
+# Cache bust
+ARG CACHE_BUST=v2
+
 WORKDIR /app
 
 # Install system dependencies
