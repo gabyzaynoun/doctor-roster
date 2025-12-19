@@ -4,7 +4,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Force cache invalidation
-RUN echo "Cache bust: v3 - $(date)" > /tmp/cache_bust
+RUN echo "Cache bust: v4 - CORS fix" > /tmp/cache_bust
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
