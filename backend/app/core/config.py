@@ -18,12 +18,22 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        origins = [origin.strip() for origin in self.cors_origins.split(",")]
-        # In production, also allow the Vercel deployment URL
+        origins = [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        # In production, also allow deployment URLs
         vercel_url = os.getenv("VERCEL_URL")
         if vercel_url:
             origins.append(f"https://{vercel_url}")
-        return origins
+        # Railway URLs
+        railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+        if railway_url:
+            origins.append(f"https://{railway_url}")
+        # Also allow common Railway frontend patterns
+        if self.app_env == "production":
+            origins.extend([
+                "https://doctor-roster-frontend-production.up.railway.app",
+                "https://doctor-roster-frontend.up.railway.app",
+            ])
+        return list(set(origins))  # Remove duplicates
 
     @property
     def is_production(self) -> bool:
