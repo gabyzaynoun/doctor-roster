@@ -4,6 +4,15 @@ set -e
 # Default to port 8000 if PORT not set
 export PORT="${PORT:-8000}"
 
+# Initialize database tables
+echo "Initializing database tables..."
+python -c "
+from app.core.database import engine, Base
+from app.models import *  # Import all models to register them
+Base.metadata.create_all(bind=engine)
+print('Database tables created/verified')
+"
+
 # Run database seed if not already seeded
 echo "Checking if database needs seeding..."
 python -c "

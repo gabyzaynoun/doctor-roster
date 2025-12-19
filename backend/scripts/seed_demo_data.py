@@ -22,6 +22,10 @@ from app.core.security import get_password_hash
 
 def seed_demo_data():
     """Populate database with comprehensive demo data."""
+    # Ensure schema exists before any queries (fresh Railway volume starts empty)
+    print("Ensuring database schema exists...")
+    Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
 
     try:
