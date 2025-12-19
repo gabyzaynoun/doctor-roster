@@ -1,10 +1,10 @@
 # Backend Dockerfile
 FROM python:3.11-slim
 
-# Cache bust
-ARG CACHE_BUST=v2
-
 WORKDIR /app
+
+# Force cache invalidation
+RUN echo "Cache bust: v3 - $(date)" > /tmp/cache_bust
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
