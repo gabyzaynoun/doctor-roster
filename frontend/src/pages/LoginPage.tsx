@@ -43,7 +43,7 @@ export function LoginPage() {
               id="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@roster.dev"
+              placeholder="admin@hospital.com"
               required
             />
           </div>
@@ -71,7 +71,7 @@ export function LoginPage() {
 
         <div className="login-demo">
           <p>Demo credentials:</p>
-          <code>admin@roster.dev / admin123</code>
+          <code>admin@hospital.com / admin123</code>
         </div>
       </div>
     </div>
