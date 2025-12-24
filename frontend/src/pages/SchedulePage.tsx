@@ -1,13 +1,40 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import toast from 'react-hot-toast';
+import { DndContext, DragEndEvent, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { api } from '../services/api';
-import type { Schedule, Center, Shift, Assignment, Doctor, ValidationResult } from '../types';
+import type { Schedule, Center, Shift, Assignment, Doctor, ValidationResult, DoctorStats, CoverageGap } from '../types';
 import { ScheduleGrid } from '../components/ScheduleGrid';
 import { ValidationPanel } from '../components/ValidationPanel';
 import { AssignmentModal } from '../components/AssignmentModal';
-import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Wand2, Send, RotateCcw, Archive, ArchiveRestore, Maximize2, LayoutGrid, Info, Save, FileStack, X } from 'lucide-react';
+import { DoctorSidebar } from '../components/DoctorSidebar';
+import { DoctorDetailModal } from '../components/DoctorDetailModal';
+import { HelpCenter } from '../components/HelpCenter';
+import { AutoFillPreview } from '../components/AutoFillPreview';
+import { EmptyState } from '../components/EmptyState';
+import {
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  CheckCircle,
+  Wand2,
+  Send,
+  RotateCcw,
+  Archive,
+  ArchiveRestore,
+  Maximize2,
+  LayoutGrid,
+  Info,
+  Save,
+  FileStack,
+  X,
+  HelpCircle,
+  Search,
+  Moon,
+  AlertCircle,
+  Eye,
+} from 'lucide-react';
 import { schedulePublishedCelebration } from '../utils/confetti';
 
 type DensityMode = 'compact' | 'comfortable' | 'spacious';
@@ -34,6 +61,10 @@ export function SchedulePage() {
   const [buildResult, setBuildResult] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  // Doctor stats for sidebar
+  const [doctorStats, setDoctorStats] = useState<Map<number, DoctorStats>>(new Map());
+  const [coverageGaps, setCoverageGaps] = useState<CoverageGap[]>([]);
+
   // Modal state
   const [selectedCell, setSelectedCell] = useState<{
     date: string;
@@ -44,6 +75,17 @@ export function SchedulePage() {
   // UI preferences
   const [density, setDensity] = useState<DensityMode>('comfortable');
   const [focusedCenterId, setFocusedCenterId] = useState<number | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // New feature modals
+  const [showHelpCenter, setShowHelpCenter] = useState(false);
+  const [showAutoFillPreview, setShowAutoFillPreview] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+
+  // Filters
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showNightShiftsOnly, setShowNightShiftsOnly] = useState(false);
+  const [showGapsOnly, setShowGapsOnly] = useState(false);
 
   // Template modal state
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -51,12 +93,50 @@ export function SchedulePage() {
   const [templateDescription, setTemplateDescription] = useState('');
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
   // Generate days for the month
   const days = useMemo(() => {
     const start = startOfMonth(new Date(year, month - 1));
     const end = endOfMonth(new Date(year, month - 1));
     return eachDayOfInterval({ start, end });
   }, [year, month]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowHelpCenter(true);
+      } else if (e.key === 'Escape') {
+        setShowHelpCenter(false);
+        setShowAutoFillPreview(false);
+        setSelectedDoctor(null);
+        setSelectedCell(null);
+      } else if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.metaKey) {
+        navigateMonth(-1);
+      } else if (e.key === 'ArrowRight' && !e.ctrlKey && !e.metaKey) {
+        navigateMonth(1);
+      } else if (e.key === 'b' && !e.ctrlKey && !e.metaKey && schedule?.status === 'draft') {
+        setShowAutoFillPreview(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [schedule]);
 
   // Load data
   useEffect(() => {
@@ -91,11 +171,27 @@ export function SchedulePage() {
         // Load validation
         const validationData = await api.validateSchedule(scheduleData.id);
         setValidation(validationData);
+
+        // Load stats
+        try {
+          const statsData = await api.getScheduleStats(scheduleData.id);
+          const statsMap = new Map<number, DoctorStats>();
+          statsData.doctor_stats.forEach((ds: DoctorStats) => {
+            statsMap.set(ds.doctor_id, ds);
+          });
+          setDoctorStats(statsMap);
+          setCoverageGaps(statsData.coverage_stats.gaps || []);
+        } catch {
+          setDoctorStats(new Map());
+          setCoverageGaps([]);
+        }
       } catch {
         // Schedule doesn't exist yet
         setSchedule(null);
         setAssignments([]);
         setValidation(null);
+        setDoctorStats(new Map());
+        setCoverageGaps([]);
       }
     } catch (err) {
       setError('Failed to load schedule data');
@@ -112,13 +208,14 @@ export function SchedulePage() {
       setAssignments([]);
       const validationData = await api.validateSchedule(newSchedule.id);
       setValidation(validationData);
+      toast.success('Schedule created! Start assigning doctors to shifts.');
     } catch (err) {
       setError('Failed to create schedule');
       console.error(err);
     }
   };
 
-  const navigateMonth = (delta: number) => {
+  const navigateMonth = useCallback((delta: number) => {
     let newMonth = month + delta;
     let newYear = year;
 
@@ -131,7 +228,7 @@ export function SchedulePage() {
     }
 
     setSearchParams({ year: String(newYear), month: String(newMonth) });
-  };
+  }, [month, year, setSearchParams]);
 
   const handleCellClick = (date: string, centerId: number, shiftId: number) => {
     if (!schedule) return;
@@ -146,6 +243,19 @@ export function SchedulePage() {
     const validationData = await api.validateSchedule(schedule.id);
     setValidation(validationData);
     setSelectedCell(null);
+
+    // Reload stats
+    try {
+      const statsData = await api.getScheduleStats(schedule.id);
+      const statsMap = new Map<number, DoctorStats>();
+      statsData.doctor_stats.forEach((ds: DoctorStats) => {
+        statsMap.set(ds.doctor_id, ds);
+      });
+      setDoctorStats(statsMap);
+      setCoverageGaps(statsData.coverage_stats.gaps || []);
+    } catch {
+      // Ignore stats errors
+    }
   };
 
   const handleAssignmentDeleted = async () => {
@@ -188,15 +298,63 @@ export function SchedulePage() {
     }
   };
 
+  // Handle drag from sidebar to grid
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || !schedule || schedule.status !== 'draft') return;
+
+    const activeData = active.data.current as { doctor?: Doctor; type?: string };
+    if (activeData?.type !== 'new-assignment' || !activeData.doctor) return;
+
+    // Parse the drop target ID (format: "cell-{date}-{centerId}-{shiftId}")
+    const dropId = over.id as string;
+    if (!dropId.startsWith('cell-')) return;
+
+    const parts = dropId.split('-');
+    if (parts.length < 4) return;
+
+    const date = parts[1];
+    const centerId = parseInt(parts[2]);
+    const shiftId = parseInt(parts[3]);
+
+    const doctor = activeData.doctor;
+
+    try {
+      await api.createAssignment({
+        schedule_id: schedule.id,
+        doctor_id: doctor.id,
+        center_id: centerId,
+        shift_id: shiftId,
+        date: date,
+      });
+
+      toast.success(`${doctor.user?.name} assigned successfully`);
+
+      // Reload data
+      const assignmentsData = await api.getAssignments({ schedule_id: schedule.id });
+      setAssignments(assignmentsData);
+      const validationData = await api.validateSchedule(schedule.id);
+      setValidation(validationData);
+
+      // Reload stats
+      const statsData = await api.getScheduleStats(schedule.id);
+      const statsMap = new Map<number, DoctorStats>();
+      statsData.doctor_stats.forEach((ds: DoctorStats) => {
+        statsMap.set(ds.doctor_id, ds);
+      });
+      setDoctorStats(statsMap);
+      setCoverageGaps(statsData.coverage_stats.gaps || []);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to create assignment');
+    }
+  };
+
   const handleAutoBuild = async (clearExisting: boolean = false) => {
     if (!schedule) return;
 
-    const confirmed = clearExisting
-      ? confirm('This will clear all existing assignments and rebuild. Continue?')
-      : confirm('This will fill empty slots with auto-generated assignments. Continue?');
-
-    if (!confirmed) return;
-
+    setShowAutoFillPreview(false);
     setIsBuilding(true);
     setBuildResult(null);
 
@@ -209,7 +367,17 @@ export function SchedulePage() {
       const validationData = await api.validateSchedule(schedule.id);
       setValidation(validationData);
 
+      // Reload stats
+      const statsData = await api.getScheduleStats(schedule.id);
+      const statsMap = new Map<number, DoctorStats>();
+      statsData.doctor_stats.forEach((ds: DoctorStats) => {
+        statsMap.set(ds.doctor_id, ds);
+      });
+      setDoctorStats(statsMap);
+      setCoverageGaps(statsData.coverage_stats.gaps || []);
+
       setBuildResult(result.message);
+      toast.success(result.message);
 
       // Clear message after 5 seconds
       setTimeout(() => setBuildResult(null), 5000);
@@ -362,286 +530,404 @@ export function SchedulePage() {
   }
 
   const monthName = format(new Date(year, month - 1), 'MMMM yyyy');
+  const gapsCount = coverageGaps.length;
 
   return (
-    <div className="schedule-page">
-      <header className="schedule-header">
-        <div className="month-nav">
-          <button onClick={() => navigateMonth(-1)} className="btn-icon" title="Previous month">
-            <ChevronLeft size={20} />
-          </button>
-          <h1>{monthName}</h1>
-          <button onClick={() => navigateMonth(1)} className="btn-icon" title="Next month">
-            <ChevronRight size={20} />
-          </button>
-        </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="schedule-page">
+        <header className="schedule-header">
+          <div className="month-nav">
+            <button onClick={() => navigateMonth(-1)} className="btn-icon" title="Previous month (←)">
+              <ChevronLeft size={20} />
+            </button>
+            <h1>{monthName}</h1>
+            <button onClick={() => navigateMonth(1)} className="btn-icon" title="Next month (→)">
+              <ChevronRight size={20} />
+            </button>
+          </div>
 
-        <div className="schedule-controls">
-          {/* Density toggle */}
-          <button
-            onClick={cycleDensity}
-            className="btn-secondary btn-sm"
-            title={`Grid density: ${getDensityInfo().label}`}
-          >
-            <LayoutGrid size={16} />
-            {getDensityInfo().label}
-          </button>
-
-          {/* Focus mode selector */}
-          <select
-            value={focusedCenterId || ''}
-            onChange={(e) => setFocusedCenterId(e.target.value ? parseInt(e.target.value) : null)}
-            className="center-focus-select"
-            title="Focus on a specific center"
-          >
-            <option value="">All Centers</option>
-            {centers.map(center => (
-              <option key={center.id} value={center.id}>
-                {center.code} - {center.name}
-              </option>
-            ))}
-          </select>
-
-          {focusedCenterId && (
+          <div className="schedule-controls">
+            {/* Help button */}
             <button
-              onClick={() => setFocusedCenterId(null)}
-              className="btn-icon"
-              title="Show all centers"
+              className="help-button"
+              onClick={() => setShowHelpCenter(true)}
+              title="Help (?)"
             >
-              <Maximize2 size={16} />
+              <HelpCircle size={16} />
             </button>
-          )}
-        </div>
 
-        <div className="schedule-actions">
-          {validation && (
+            {/* Density toggle */}
             <button
-              onClick={() => setShowValidation(!showValidation)}
-              className={`btn-validation ${validation.is_valid ? 'valid' : validation.error_count > 0 ? 'invalid' : 'warning'}`}
-              title={validation.is_valid ? 'Schedule is valid' : `${validation.error_count} errors, ${validation.warning_count} warnings`}
+              onClick={cycleDensity}
+              className="btn-secondary btn-sm"
+              title={`Grid density: ${getDensityInfo().label}`}
             >
-              {validation.is_valid ? (
-                <>
-                  <CheckCircle size={16} /> Valid
-                </>
-              ) : validation.error_count > 0 ? (
-                <>
-                  <AlertTriangle size={16} />
-                  <span className="validation-counts">
-                    <span className="error-count">{validation.error_count}</span>
-                    {validation.warning_count > 0 && (
-                      <span className="warning-count">+{validation.warning_count}</span>
-                    )}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <Info size={16} /> {validation.warning_count} warnings
-                </>
-              )}
+              <LayoutGrid size={16} />
+              {getDensityInfo().label}
             </button>
-          )}
 
-          {schedule && schedule.status === 'draft' && (
-            <button
-              onClick={() => handleAutoBuild(false)}
-              className="btn-secondary"
-              disabled={isBuilding || isUpdatingStatus}
-              title="Auto-fill empty slots"
+            {/* Focus mode selector */}
+            <select
+              value={focusedCenterId || ''}
+              onChange={(e) => setFocusedCenterId(e.target.value ? parseInt(e.target.value) : null)}
+              className="center-focus-select"
+              title="Focus on a specific center"
             >
-              <Wand2 size={16} />
-              {isBuilding ? 'Building...' : 'Auto-Build'}
-            </button>
-          )}
+              <option value="">All Centers</option>
+              {centers.map(center => (
+                <option key={center.id} value={center.id}>
+                  {center.code} - {center.name}
+                </option>
+              ))}
+            </select>
 
-          {!schedule && (
-            <button onClick={createSchedule} className="btn-primary">
-              Create Schedule
-            </button>
-          )}
-
-          {schedule && schedule.status === 'draft' && (
-            <button
-              onClick={handlePublish}
-              className="btn-primary"
-              disabled={isUpdatingStatus}
-              title="Publish schedule"
-            >
-              <Send size={16} />
-              Publish
-            </button>
-          )}
-
-          {schedule && schedule.status === 'published' && (
-            <button
-              onClick={handleUnpublish}
-              className="btn-secondary"
-              disabled={isUpdatingStatus}
-              title="Return to draft"
-            >
-              <RotateCcw size={16} />
-              Unpublish
-            </button>
-          )}
-
-          {schedule && assignments.length > 0 && (
-            <button
-              onClick={() => {
-                setTemplateName(`${format(new Date(year, month - 1), 'MMMM yyyy')} Template`);
-                setShowTemplateModal(true);
-              }}
-              className="btn-icon"
-              title="Save as template"
-            >
-              <FileStack size={18} />
-            </button>
-          )}
-
-          {schedule && schedule.status !== 'archived' && (
-            <button
-              onClick={handleArchive}
-              className="btn-icon"
-              disabled={isUpdatingStatus}
-              title="Archive schedule"
-            >
-              <Archive size={18} />
-            </button>
-          )}
-
-          {schedule && schedule.status === 'archived' && (
-            <button
-              onClick={handleUnarchive}
-              className="btn-secondary"
-              disabled={isUpdatingStatus}
-              title="Unarchive schedule"
-            >
-              <ArchiveRestore size={16} />
-              Unarchive
-            </button>
-          )}
-
-          {schedule && (
-            <span className={`status-badge status-${schedule.status}`}>
-              {schedule.status}
-            </span>
-          )}
-        </div>
-      </header>
-
-      {buildResult && (
-        <div className="build-result">
-          <CheckCircle size={16} />
-          {buildResult}
-        </div>
-      )}
-
-      {statusMessage && (
-        <div className="status-message">
-          <CheckCircle size={16} />
-          {statusMessage}
-        </div>
-      )}
-
-      {!schedule ? (
-        <div className="no-schedule">
-          <p>No schedule exists for {monthName}.</p>
-          <p>Click "Create Schedule" to start planning.</p>
-        </div>
-      ) : (
-        <div className="schedule-content">
-          {showValidation && validation && (
-            <ValidationPanel validation={validation} onClose={() => setShowValidation(false)} />
-          )}
-
-          <ScheduleGrid
-            days={days}
-            centers={centers}
-            shifts={shifts}
-            assignments={assignments}
-            doctors={doctors}
-            onCellClick={handleCellClick}
-            onAssignmentMove={handleAssignmentMove}
-            isDraggable={schedule.status === 'draft'}
-            density={density}
-            focusedCenterId={focusedCenterId}
-          />
-        </div>
-      )}
-
-      {selectedCell && schedule && (
-        <AssignmentModal
-          scheduleId={schedule.id}
-          date={selectedCell.date}
-          centerId={selectedCell.centerId}
-          shiftId={selectedCell.shiftId}
-          centers={centers}
-          shifts={shifts}
-          doctors={doctors}
-          assignments={assignments}
-          onClose={() => setSelectedCell(null)}
-          onSaved={handleAssignmentSaved}
-          onDeleted={handleAssignmentDeleted}
-        />
-      )}
-
-      {/* Save as Template Modal */}
-      {showTemplateModal && (
-        <div className="modal-overlay" onClick={() => setShowTemplateModal(false)}>
-          <div className="modal template-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2><FileStack size={20} /> Save as Template</h2>
-              <button className="btn-icon" onClick={() => setShowTemplateModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-content">
-              <p className="modal-description">
-                Save this schedule's assignment pattern as a reusable template.
-                You can apply it to create new schedules quickly.
-              </p>
-              <div className="form-group">
-                <label htmlFor="templateName">Template Name *</label>
-                <input
-                  id="templateName"
-                  type="text"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  placeholder="e.g., December 2025 Pattern"
-                  className="form-control"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="templateDescription">Description (optional)</label>
-                <textarea
-                  id="templateDescription"
-                  value={templateDescription}
-                  onChange={(e) => setTemplateDescription(e.target.value)}
-                  placeholder="Describe when to use this template..."
-                  className="form-control"
-                  rows={3}
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
+            {focusedCenterId && (
               <button
+                onClick={() => setFocusedCenterId(null)}
+                className="btn-icon"
+                title="Show all centers"
+              >
+                <Maximize2 size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="schedule-actions">
+            {validation && (
+              <button
+                onClick={() => setShowValidation(!showValidation)}
+                className={`btn-validation ${validation.is_valid ? 'valid' : validation.error_count > 0 ? 'invalid' : 'warning'}`}
+                title={validation.is_valid ? 'Schedule is valid' : `${validation.error_count} errors, ${validation.warning_count} warnings`}
+              >
+                {validation.is_valid ? (
+                  <>
+                    <CheckCircle size={16} /> Valid
+                  </>
+                ) : validation.error_count > 0 ? (
+                  <>
+                    <AlertTriangle size={16} />
+                    <span className="validation-counts">
+                      <span className="error-count">{validation.error_count}</span>
+                      {validation.warning_count > 0 && (
+                        <span className="warning-count">+{validation.warning_count}</span>
+                      )}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Info size={16} /> {validation.warning_count} warnings
+                  </>
+                )}
+              </button>
+            )}
+
+            {schedule && schedule.status === 'draft' && (
+              <button
+                onClick={() => setShowAutoFillPreview(true)}
                 className="btn-secondary"
-                onClick={() => setShowTemplateModal(false)}
-                disabled={isSavingTemplate}
+                disabled={isBuilding || isUpdatingStatus}
+                title="Preview auto-fill suggestions (B)"
               >
-                Cancel
+                <Wand2 size={16} />
+                {isBuilding ? 'Building...' : 'Auto-Build'}
+                {gapsCount > 0 && <span className="gaps-badge">{gapsCount}</span>}
               </button>
+            )}
+
+            {!schedule && (
+              <button onClick={createSchedule} className="btn-primary">
+                Create Schedule
+              </button>
+            )}
+
+            {schedule && schedule.status === 'draft' && (
               <button
+                onClick={handlePublish}
                 className="btn-primary"
-                onClick={handleSaveAsTemplate}
-                disabled={!templateName.trim() || isSavingTemplate}
+                disabled={isUpdatingStatus}
+                title="Publish schedule"
               >
-                <Save size={16} />
-                {isSavingTemplate ? 'Saving...' : 'Save Template'}
+                <Send size={16} />
+                Publish
               </button>
+            )}
+
+            {schedule && schedule.status === 'published' && (
+              <button
+                onClick={handleUnpublish}
+                className="btn-secondary"
+                disabled={isUpdatingStatus}
+                title="Return to draft"
+              >
+                <RotateCcw size={16} />
+                Unpublish
+              </button>
+            )}
+
+            {schedule && assignments.length > 0 && (
+              <button
+                onClick={() => {
+                  setTemplateName(`${format(new Date(year, month - 1), 'MMMM yyyy')} Template`);
+                  setShowTemplateModal(true);
+                }}
+                className="btn-icon"
+                title="Save as template"
+              >
+                <FileStack size={18} />
+              </button>
+            )}
+
+            {schedule && schedule.status !== 'archived' && (
+              <button
+                onClick={handleArchive}
+                className="btn-icon"
+                disabled={isUpdatingStatus}
+                title="Archive schedule"
+              >
+                <Archive size={18} />
+              </button>
+            )}
+
+            {schedule && schedule.status === 'archived' && (
+              <button
+                onClick={handleUnarchive}
+                className="btn-secondary"
+                disabled={isUpdatingStatus}
+                title="Unarchive schedule"
+              >
+                <ArchiveRestore size={16} />
+                Unarchive
+              </button>
+            )}
+
+            {schedule && (
+              <span className={`status-badge status-${schedule.status}`}>
+                {schedule.status}
+              </span>
+            )}
+          </div>
+        </header>
+
+        {buildResult && (
+          <div className="build-result">
+            <CheckCircle size={16} />
+            {buildResult}
+          </div>
+        )}
+
+        {statusMessage && (
+          <div className="status-message">
+            <CheckCircle size={16} />
+            {statusMessage}
+          </div>
+        )}
+
+        {/* Quick Filter Toolbar */}
+        {schedule && (
+          <div className="schedule-toolbar">
+            <div className="toolbar-search">
+              <Search size={14} />
+              <input
+                type="text"
+                placeholder="Search doctors..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="toolbar-divider" />
+            <button
+              className={`quick-filter-btn ${showNightShiftsOnly ? 'active' : ''}`}
+              onClick={() => setShowNightShiftsOnly(!showNightShiftsOnly)}
+            >
+              <Moon size={12} />
+              Night Shifts
+            </button>
+            <button
+              className={`quick-filter-btn ${showGapsOnly ? 'active' : ''}`}
+              onClick={() => setShowGapsOnly(!showGapsOnly)}
+            >
+              <AlertCircle size={12} />
+              Coverage Gaps
+              {gapsCount > 0 && <span className="gaps-badge">{gapsCount}</span>}
+            </button>
+            <button
+              className="quick-filter-btn"
+              onClick={() => setShowValidation(true)}
+            >
+              <Eye size={12} />
+              View Issues
+            </button>
+          </div>
+        )}
+
+        {!schedule ? (
+          <EmptyState
+            type="schedule"
+            action={{
+              label: 'Create Schedule',
+              onClick: createSchedule,
+            }}
+          />
+        ) : assignments.length === 0 ? (
+          <div className="schedule-with-sidebar">
+            <DoctorSidebar
+              doctors={doctors}
+              doctorStats={doctorStats}
+              isCollapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+              onDoctorSelect={setSelectedDoctor}
+            />
+            <div className="schedule-grid-wrapper">
+              <EmptyState
+                type="schedule-no-assignments"
+                title="Ready to Schedule!"
+                description="Your schedule is created. Now assign doctors to shifts by clicking cells or dragging from the sidebar."
+                action={{
+                  label: `Auto-Fill ${gapsCount} Gaps`,
+                  onClick: () => setShowAutoFillPreview(true),
+                  icon: <Wand2 size={18} />,
+                }}
+              />
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        ) : (
+          <div className="schedule-with-sidebar">
+            <DoctorSidebar
+              doctors={doctors}
+              doctorStats={doctorStats}
+              isCollapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+              onDoctorSelect={setSelectedDoctor}
+            />
+            <div className="schedule-grid-wrapper">
+              {showValidation && validation && (
+                <ValidationPanel validation={validation} onClose={() => setShowValidation(false)} />
+              )}
+
+              <ScheduleGrid
+                days={days}
+                centers={centers}
+                shifts={shifts}
+                assignments={assignments}
+                doctors={doctors}
+                onCellClick={handleCellClick}
+                onAssignmentMove={handleAssignmentMove}
+                isDraggable={schedule.status === 'draft'}
+                density={density}
+                focusedCenterId={focusedCenterId}
+              />
+            </div>
+          </div>
+        )}
+
+        {selectedCell && schedule && (
+          <AssignmentModal
+            scheduleId={schedule.id}
+            date={selectedCell.date}
+            centerId={selectedCell.centerId}
+            shiftId={selectedCell.shiftId}
+            centers={centers}
+            shifts={shifts}
+            doctors={doctors}
+            assignments={assignments}
+            onClose={() => setSelectedCell(null)}
+            onSaved={handleAssignmentSaved}
+            onDeleted={handleAssignmentDeleted}
+          />
+        )}
+
+        {/* Doctor Detail Modal */}
+        {selectedDoctor && (
+          <DoctorDetailModal
+            doctor={selectedDoctor}
+            stats={doctorStats.get(selectedDoctor.id)}
+            onClose={() => setSelectedDoctor(null)}
+          />
+        )}
+
+        {/* Help Center */}
+        {showHelpCenter && <HelpCenter onClose={() => setShowHelpCenter(false)} />}
+
+        {/* Auto-Fill Preview */}
+        {showAutoFillPreview && schedule && (
+          <AutoFillPreview
+            scheduleId={schedule.id}
+            gaps={coverageGaps}
+            doctors={doctors}
+            doctorStats={doctorStats}
+            onConfirm={handleAutoBuild}
+            onCancel={() => setShowAutoFillPreview(false)}
+          />
+        )}
+
+        {/* Save as Template Modal */}
+        {showTemplateModal && (
+          <div className="modal-overlay" onClick={() => setShowTemplateModal(false)}>
+            <div className="modal template-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2><FileStack size={20} /> Save as Template</h2>
+                <button className="btn-icon" onClick={() => setShowTemplateModal(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="modal-content">
+                <p className="modal-description">
+                  Save this schedule's assignment pattern as a reusable template.
+                  You can apply it to create new schedules quickly.
+                </p>
+                <div className="form-group">
+                  <label htmlFor="templateName">Template Name *</label>
+                  <input
+                    id="templateName"
+                    type="text"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    placeholder="e.g., December 2025 Pattern"
+                    className="form-control"
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="templateDescription">Description (optional)</label>
+                  <textarea
+                    id="templateDescription"
+                    value={templateDescription}
+                    onChange={(e) => setTemplateDescription(e.target.value)}
+                    placeholder="Describe when to use this template..."
+                    className="form-control"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  className="btn-secondary"
+                  onClick={() => setShowTemplateModal(false)}
+                  disabled={isSavingTemplate}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={handleSaveAsTemplate}
+                  disabled={!templateName.trim() || isSavingTemplate}
+                >
+                  <Save size={16} />
+                  {isSavingTemplate ? 'Saving...' : 'Save Template'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Drag Overlay */}
+        <DragOverlay>
+          {/* This is handled by DoctorSidebar internally */}
+        </DragOverlay>
+      </div>
+    </DndContext>
   );
 }

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -18,8 +18,10 @@ import {
   UserCircle,
   ShoppingBag,
   Scale,
+  HelpCircle,
 } from 'lucide-react';
 import { NotificationCenter } from './NotificationCenter';
+import { HelpCenter } from './HelpCenter';
 
 interface LayoutProps {
   children: ReactNode;
@@ -36,6 +38,7 @@ export function Layout({ children }: LayoutProps) {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -139,6 +142,15 @@ export function Layout({ children }: LayoutProps) {
 
         <div className="navbar-user">
           <button
+            className="btn-icon help-toggle"
+            onClick={() => setShowHelp(true)}
+            title="Help & Shortcuts (Press ?)"
+            data-tour="help-button"
+          >
+            <HelpCircle size={18} />
+          </button>
+
+          <button
             className="btn-icon theme-toggle"
             onClick={toggleTheme}
             title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
@@ -191,6 +203,9 @@ export function Layout({ children }: LayoutProps) {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* Global Help Center Modal */}
+      {showHelp && <HelpCenter onClose={() => setShowHelp(false)} />}
     </div>
   );
 }
