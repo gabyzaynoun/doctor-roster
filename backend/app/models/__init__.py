@@ -21,6 +21,8 @@ from app.models.notification import (
     NotificationPriority,
 )
 from app.models.message import Conversation, Message, MessageReadReceipt
+from app.models.schedule_template import ScheduleTemplate
+from app.models.shift_posting import ShiftPosting, PostingType, PostingStatus
 
 __all__ = [
     "User",
@@ -45,4 +47,8 @@ __all__ = [
     "Conversation",
     "Message",
     "MessageReadReceipt",
+    "ScheduleTemplate",
+    "ShiftPosting",
+    "PostingType",
+    "PostingStatus",
 ]

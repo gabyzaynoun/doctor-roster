@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Schedule, ScheduleStats, DoctorStats } from '../types';
 import {
   BarChart3,
   TrendingUp,
+  TrendingDown,
   Users,
   Calendar,
   AlertTriangle,
@@ -16,13 +18,18 @@ import {
   Download,
   FileSpreadsheet,
   Table,
+  Wand2,
+  ArrowRight,
+  Zap,
 } from 'lucide-react';
 import './DashboardPage.css';
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
   const [stats, setStats] = useState<ScheduleStats | null>(null);
+  const [previousStats, setPreviousStats] = useState<ScheduleStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,12 +67,53 @@ export function DashboardPage() {
     try {
       const data = await api.getScheduleStats(scheduleId);
       setStats(data);
+
+      // Try to load previous month's stats for comparison
+      const currentIndex = schedules.findIndex(s => s.id === scheduleId);
+      if (currentIndex < schedules.length - 1) {
+        const previousSchedule = schedules[currentIndex + 1];
+        try {
+          const prevData = await api.getScheduleStats(previousSchedule.id);
+          setPreviousStats(prevData);
+        } catch {
+          setPreviousStats(null);
+        }
+      } else {
+        setPreviousStats(null);
+      }
     } catch (err) {
       setError('Failed to load statistics');
       console.error(err);
     } finally {
       setIsLoadingStats(false);
     }
+  };
+
+  // Calculate trend between current and previous stats
+  const getTrend = (current: number, previous: number | undefined): { direction: 'up' | 'down' | 'same'; percent: number } => {
+    if (previous === undefined || previous === 0) return { direction: 'same', percent: 0 };
+    const diff = current - previous;
+    const percent = Math.round((diff / previous) * 100);
+    if (percent > 0) return { direction: 'up', percent };
+    if (percent < 0) return { direction: 'down', percent: Math.abs(percent) };
+    return { direction: 'same', percent: 0 };
+  };
+
+  // Render trend indicator
+  const renderTrend = (current: number, previous: number | undefined, invertColors = false) => {
+    const trend = getTrend(current, previous);
+    if (trend.direction === 'same') return null;
+
+    const isPositive = invertColors ? trend.direction === 'down' : trend.direction === 'up';
+    const color = isPositive ? 'var(--success)' : 'var(--danger)';
+    const Icon = trend.direction === 'up' ? TrendingUp : TrendingDown;
+
+    return (
+      <span className="trend-indicator" style={{ color }}>
+        <Icon size={14} />
+        <span>{trend.percent}%</span>
+      </span>
+    );
   };
 
   const navigateSchedule = (direction: 'prev' | 'next') => {
@@ -218,6 +266,49 @@ export function DashboardPage() {
         </div>
       ) : stats ? (
         <>
+          {/* Quick Actions Panel */}
+          <div className="quick-actions-panel">
+            <h3><Zap size={18} /> Quick Actions</h3>
+            <div className="quick-actions-grid">
+              <button
+                className="quick-action-btn"
+                onClick={() => navigate(`/schedule?year=${selectedSchedule.year}&month=${selectedSchedule.month}`)}
+              >
+                <Calendar size={20} />
+                <span>View Schedule</span>
+                <ArrowRight size={16} className="action-arrow" />
+              </button>
+              {stats.coverage_stats.gaps_count > 0 && (
+                <button
+                  className="quick-action-btn action-warning"
+                  onClick={() => navigate(`/schedule?year=${selectedSchedule.year}&month=${selectedSchedule.month}`)}
+                >
+                  <Wand2 size={20} />
+                  <span>Auto-Fill {stats.coverage_stats.gaps_count} Gaps</span>
+                  <ArrowRight size={16} className="action-arrow" />
+                </button>
+              )}
+              {stats.summary.doctors_over_limit > 0 && (
+                <button
+                  className="quick-action-btn action-danger"
+                  onClick={() => navigate('/doctors')}
+                >
+                  <AlertTriangle size={20} />
+                  <span>{stats.summary.doctors_over_limit} Doctors Over Limit</span>
+                  <ArrowRight size={16} className="action-arrow" />
+                </button>
+              )}
+              <button
+                className="quick-action-btn"
+                onClick={() => navigate('/doctors')}
+              >
+                <Users size={20} />
+                <span>Manage Doctors</span>
+                <ArrowRight size={16} className="action-arrow" />
+              </button>
+            </div>
+          </div>
+
           {/* Summary Cards */}
           <div className="stats-grid">
             <div className="stat-card">
@@ -225,7 +316,10 @@ export function DashboardPage() {
                 <Calendar size={24} />
               </div>
               <div className="stat-content">
-                <span className="stat-value">{stats.summary.total_assignments}</span>
+                <div className="stat-value-row">
+                  <span className="stat-value">{stats.summary.total_assignments}</span>
+                  {renderTrend(stats.summary.total_assignments, previousStats?.summary.total_assignments)}
+                </div>
                 <span className="stat-label">Total Assignments</span>
               </div>
             </div>
@@ -235,12 +329,15 @@ export function DashboardPage() {
                 <Clock size={24} />
               </div>
               <div className="stat-content">
-                <span className="stat-value">{stats.summary.total_hours.toLocaleString()}h</span>
+                <div className="stat-value-row">
+                  <span className="stat-value">{stats.summary.total_hours.toLocaleString()}h</span>
+                  {renderTrend(stats.summary.total_hours, previousStats?.summary.total_hours)}
+                </div>
                 <span className="stat-label">Total Hours</span>
               </div>
             </div>
 
-            <div className="stat-card">
+            <div className="stat-card clickable" onClick={() => navigate(`/schedule?year=${selectedSchedule.year}&month=${selectedSchedule.month}`)}>
               <div className={`stat-icon ${getCoverageColor(stats.summary.coverage_percentage)}`}>
                 {stats.summary.coverage_percentage >= 90 ? (
                   <CheckCircle size={24} />
@@ -249,9 +346,12 @@ export function DashboardPage() {
                 )}
               </div>
               <div className="stat-content">
-                <span className={`stat-value ${getCoverageColor(stats.summary.coverage_percentage)}`}>
-                  {stats.summary.coverage_percentage}%
-                </span>
+                <div className="stat-value-row">
+                  <span className={`stat-value ${getCoverageColor(stats.summary.coverage_percentage)}`}>
+                    {stats.summary.coverage_percentage}%
+                  </span>
+                  {renderTrend(stats.summary.coverage_percentage, previousStats?.summary.coverage_percentage)}
+                </div>
                 <span className="stat-label">Coverage</span>
               </div>
             </div>
@@ -261,33 +361,41 @@ export function DashboardPage() {
                 <TrendingUp size={24} />
               </div>
               <div className="stat-content">
-                <span className={`stat-value ${getBalanceColor(stats.summary.workload_balance_score)}`}>
-                  {stats.summary.workload_balance_score}%
-                </span>
+                <div className="stat-value-row">
+                  <span className={`stat-value ${getBalanceColor(stats.summary.workload_balance_score)}`}>
+                    {stats.summary.workload_balance_score}%
+                  </span>
+                  {renderTrend(stats.summary.workload_balance_score, previousStats?.summary.workload_balance_score)}
+                </div>
                 <span className="stat-label">Workload Balance</span>
               </div>
             </div>
 
-            <div className="stat-card">
+            <div className="stat-card clickable" onClick={() => navigate('/doctors')}>
               <div className="stat-icon">
                 <Users size={24} />
               </div>
               <div className="stat-content">
-                <span className="stat-value">
-                  {stats.summary.doctors_with_assignments}/{stats.summary.total_doctors}
-                </span>
+                <div className="stat-value-row">
+                  <span className="stat-value">
+                    {stats.summary.doctors_with_assignments}/{stats.summary.total_doctors}
+                  </span>
+                </div>
                 <span className="stat-label">Active Doctors</span>
               </div>
             </div>
 
-            <div className="stat-card">
+            <div className={`stat-card ${stats.summary.doctors_over_limit > 0 ? 'clickable' : ''}`} onClick={() => stats.summary.doctors_over_limit > 0 && navigate('/doctors')}>
               <div className={`stat-icon ${stats.summary.doctors_over_limit > 0 ? 'text-red-600' : 'text-green-600'}`}>
                 <AlertTriangle size={24} />
               </div>
               <div className="stat-content">
-                <span className={`stat-value ${stats.summary.doctors_over_limit > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {stats.summary.doctors_over_limit}
-                </span>
+                <div className="stat-value-row">
+                  <span className={`stat-value ${stats.summary.doctors_over_limit > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {stats.summary.doctors_over_limit}
+                  </span>
+                  {renderTrend(stats.summary.doctors_over_limit, previousStats?.summary.doctors_over_limit, true)}
+                </div>
                 <span className="stat-label">Over Hours Limit</span>
               </div>
             </div>

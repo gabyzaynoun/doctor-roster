@@ -14,6 +14,21 @@ import {
 } from '@dnd-kit/core';
 import type { Center, Shift, Assignment, Doctor } from '../types';
 
+// Specialty-based colors for doctor badges
+const SPECIALTY_COLORS: Record<string, { bg: string; text: string }> = {
+  'Emergency Medicine': { bg: 'rgba(239, 68, 68, 0.2)', text: '#ef4444' },
+  'Emergency': { bg: 'rgba(239, 68, 68, 0.2)', text: '#ef4444' },
+  'ICU': { bg: 'rgba(168, 85, 247, 0.2)', text: '#a855f7' },
+  'Intensive Care': { bg: 'rgba(168, 85, 247, 0.2)', text: '#a855f7' },
+  'Pediatrics': { bg: 'rgba(251, 146, 60, 0.2)', text: '#fb923c' },
+  'Internal Medicine': { bg: 'rgba(34, 197, 94, 0.2)', text: '#22c55e' },
+  'Surgery': { bg: 'rgba(236, 72, 153, 0.2)', text: '#ec4899' },
+  'Cardiology': { bg: 'rgba(244, 63, 94, 0.2)', text: '#f43f5e' },
+  'Neurology': { bg: 'rgba(99, 102, 241, 0.2)', text: '#6366f1' },
+  'Orthopedics': { bg: 'rgba(20, 184, 166, 0.2)', text: '#14b8a6' },
+  'default': { bg: 'rgba(59, 130, 246, 0.9)', text: '#ffffff' },
+};
+
 interface ScheduleGridProps {
   days: Date[];
   centers: Center[];
@@ -23,11 +38,15 @@ interface ScheduleGridProps {
   onCellClick: (date: string, centerId: number, shiftId: number) => void;
   onAssignmentMove?: (assignmentId: number, newDate: string, newCenterId: number, newShiftId: number) => void;
   isDraggable?: boolean;
+  density?: 'compact' | 'comfortable' | 'spacious';
+  focusedCenterId?: number | null;
 }
 
 interface DraggableAssignmentProps {
   assignment: Assignment;
   doctorName: string;
+  doctorInitials: string;
+  specialty?: string;
 }
 
 interface DroppableCellProps {
@@ -41,30 +60,38 @@ interface DroppableCellProps {
   onClick: () => void;
 }
 
-function DraggableAssignment({ assignment, doctorName }: DraggableAssignmentProps) {
+function DraggableAssignment({ assignment, doctorName, doctorInitials, specialty }: DraggableAssignmentProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `assignment-${assignment.id}`,
     data: { assignment },
   });
+
+  const colors = specialty ? (SPECIALTY_COLORS[specialty] || SPECIALTY_COLORS.default) : SPECIALTY_COLORS.default;
 
   const style = transform
     ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
         opacity: isDragging ? 0.5 : 1,
         cursor: 'grab',
+        background: colors.bg,
+        color: colors.text,
       }
-    : { cursor: 'grab' };
+    : {
+        cursor: 'grab',
+        background: colors.bg,
+        color: colors.text,
+      };
 
   return (
     <div
       ref={setNodeRef}
       className="assignment-chip draggable"
-      title={`${doctorName} (drag to move)`}
+      title={`${doctorName}${specialty ? ` (${specialty})` : ''} - drag to move`}
       style={style}
       {...listeners}
       {...attributes}
     >
-      {doctorName.split(' ')[0]}
+      {doctorInitials}
     </div>
   );
 }
@@ -102,6 +129,8 @@ export function ScheduleGrid({
   onCellClick,
   onAssignmentMove,
   isDraggable = true,
+  density = 'comfortable',
+  focusedCenterId = null,
 }: ScheduleGridProps) {
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
 
@@ -124,10 +153,57 @@ export function ScheduleGrid({
     return map;
   }, [assignments]);
 
+  // Create doctor lookup for quick access
+  const doctorMap = useMemo(() => {
+    const map = new Map<number, Doctor>();
+    for (const doctor of doctors) {
+      map.set(doctor.id, doctor);
+    }
+    return map;
+  }, [doctors]);
+
+  // Get doctor by ID
+  const getDoctor = (doctorId: number): Doctor | undefined => {
+    return doctorMap.get(doctorId);
+  };
+
   // Get doctor name by ID
   const getDoctorName = (doctorId: number): string => {
-    const doctor = doctors.find((d) => d.id === doctorId);
+    const doctor = getDoctor(doctorId);
     return doctor?.user?.name || `Doctor ${doctorId}`;
+  };
+
+  // Get doctor initials
+  const getDoctorInitials = (doctorId: number): string => {
+    const doctor = getDoctor(doctorId);
+    const name = doctor?.user?.name || '';
+    if (!name) return 'Dr';
+    const parts = name.split(' ').filter(Boolean);
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return parts.map(p => p[0]).join('').toUpperCase().substring(0, 2);
+  };
+
+  // Get doctor specialty
+  const getDoctorSpecialty = (doctorId: number): string | undefined => {
+    const doctor = getDoctor(doctorId);
+    return doctor?.specialty ?? undefined;
+  };
+
+  // Filter centers based on focus mode
+  const visibleCenters = useMemo(() => {
+    if (focusedCenterId) {
+      return centers.filter(c => c.id === focusedCenterId);
+    }
+    return centers;
+  }, [centers, focusedCenterId]);
+
+  // Get density class
+  const getDensityClass = (): string => {
+    switch (density) {
+      case 'compact': return 'density-compact';
+      case 'spacious': return 'density-spacious';
+      default: return 'density-comfortable';
+    }
   };
 
   // Get shift color class
@@ -184,7 +260,7 @@ export function ScheduleGrid({
   };
 
   const gridContent = (
-    <div className="schedule-grid-container">
+    <div className={`schedule-grid-container ${getDensityClass()}`}>
       <div className="schedule-grid">
         {/* Header row with days */}
         <div className="grid-header">
@@ -201,21 +277,29 @@ export function ScheduleGrid({
         </div>
 
         {/* Rows for each center/shift combination */}
-        {centers.map((center) => (
-          <div key={center.id} className="center-group">
+        {visibleCenters.map((center, centerIndex) => (
+          <div key={center.id} className={`center-group ${centerIndex % 2 === 1 ? 'center-group-alt' : ''}`}>
+            {/* Center header row */}
+            <div className="center-header-row">
+              <div className="grid-cell center-header-cell">
+                <span className="center-name-full">{center.name}</span>
+                <span className="center-code-badge">{center.code}</span>
+              </div>
+              {days.map((day) => (
+                <div key={day.toISOString()} className={`grid-cell center-header-spacer ${getDayClass(day)}`} />
+              ))}
+            </div>
             {/* Get allowed shifts for this center */}
             {shifts
               .filter((shift) => center.allowed_shifts.includes(shift.code))
               .map((shift, shiftIndex) => (
-                <div key={`${center.id}-${shift.id}`} className="grid-row">
+                <div key={`${center.id}-${shift.id}`} className={`grid-row ${shiftIndex % 2 === 1 ? 'row-alt' : ''}`}>
                   {/* Row header */}
                   <div className="grid-cell row-header">
-                    {shiftIndex === 0 && (
-                      <span className="center-name">{center.code}</span>
-                    )}
                     <span className={`shift-code ${getShiftColorClass(shift)}`}>
                       {shift.code}
                     </span>
+                    <span className="shift-time">{shift.start_time?.slice(0, 5)}</span>
                   </div>
 
                   {/* Day cells */}
@@ -242,6 +326,8 @@ export function ScheduleGrid({
                               key={assignment.id}
                               assignment={assignment}
                               doctorName={getDoctorName(assignment.doctor_id)}
+                              doctorInitials={getDoctorInitials(assignment.doctor_id)}
+                              specialty={getDoctorSpecialty(assignment.doctor_id)}
                             />
                           ))}
                         </DroppableCell>
@@ -256,15 +342,20 @@ export function ScheduleGrid({
                         }`}
                         onClick={() => onCellClick(dateStr, center.id, shift.id)}
                       >
-                        {cellAssignments.map((assignment) => (
-                          <div
-                            key={assignment.id}
-                            className="assignment-chip"
-                            title={getDoctorName(assignment.doctor_id)}
-                          >
-                            {getDoctorName(assignment.doctor_id).split(' ')[0]}
-                          </div>
-                        ))}
+                        {cellAssignments.map((assignment) => {
+                          const specialty = getDoctorSpecialty(assignment.doctor_id);
+                          const chipColors = SPECIALTY_COLORS[specialty || ''] || SPECIALTY_COLORS.default;
+                          return (
+                            <div
+                              key={assignment.id}
+                              className="assignment-chip"
+                              title={`${getDoctorName(assignment.doctor_id)}${specialty ? ` (${specialty})` : ''}`}
+                              style={{ background: chipColors.bg, color: chipColors.text }}
+                            >
+                              {getDoctorInitials(assignment.doctor_id)}
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}

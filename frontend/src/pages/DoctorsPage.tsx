@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import type { Doctor } from '../types';
+import type { Doctor, Schedule, DoctorStats } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
   Users,
@@ -14,6 +14,9 @@ import {
   AlertTriangle,
   Moon,
   Baby,
+  Clock,
+  Activity,
+  Stethoscope,
 } from 'lucide-react';
 
 interface NewDoctorForm {
@@ -44,6 +47,8 @@ export function DoctorsPage() {
   const isAdmin = currentUser?.role === 'admin';
 
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [doctorStats, setDoctorStats] = useState<Map<number, DoctorStats>>(new Map());
+  const [, setCurrentSchedule] = useState<Schedule | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,6 +69,7 @@ export function DoctorsPage() {
 
   useEffect(() => {
     loadDoctors();
+    loadCurrentScheduleStats();
   }, []);
 
   const loadDoctors = async () => {
@@ -77,6 +83,35 @@ export function DoctorsPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const loadCurrentScheduleStats = async () => {
+    try {
+      // Get the current month's schedule
+      const now = new Date();
+      const schedule = await api.getScheduleByMonth(now.getFullYear(), now.getMonth() + 1);
+      setCurrentSchedule(schedule);
+
+      // Load stats for this schedule
+      const stats = await api.getScheduleStats(schedule.id);
+      const statsMap = new Map<number, DoctorStats>();
+      stats.doctor_stats.forEach((ds: DoctorStats) => {
+        statsMap.set(ds.doctor_id, ds);
+      });
+      setDoctorStats(statsMap);
+    } catch {
+      // Schedule might not exist for current month
+      setCurrentSchedule(null);
+      setDoctorStats(new Map());
+    }
+  };
+
+  // Get hours bar color
+  const getHoursBarColor = (stats: DoctorStats | undefined): string => {
+    if (!stats) return 'var(--bg-tertiary)';
+    if (stats.is_over_limit) return 'var(--danger)';
+    if (stats.hours_percentage >= 80) return 'var(--warning)';
+    return 'var(--primary)';
   };
 
   const handleAddDoctor = async () => {
@@ -468,74 +503,116 @@ export function DoctorsPage() {
       )}
 
       <div className="doctors-grid">
-        {filteredDoctors.map((doctor) => (
-          <div key={doctor.id} className={`doctor-card ${!doctor.is_active ? 'inactive' : ''}`}>
-            <div className="doctor-avatar">{doctor.user?.name?.charAt(0) || 'D'}</div>
-            <div className="doctor-info">
-              <h3>{doctor.user?.name || `Doctor ${doctor.id}`}</h3>
-              <p className="doctor-email">{doctor.user?.email}</p>
-              <div className="doctor-meta">
-                <span className={`badge badge-${doctor.user?.nationality || 'unknown'}`}>
-                  {doctor.user?.nationality === 'saudi' ? 'Saudi' : 'Non-Saudi'}
-                </span>
-                <span className={`badge badge-${doctor.is_active ? 'active' : 'inactive'}`}>
-                  {doctor.is_active ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-              <div className="doctor-capabilities">
-                {doctor.can_work_nights && (
-                  <span className="capability" title="Can work nights">
-                    <Moon size={14} />
-                  </span>
+        {filteredDoctors.map((doctor) => {
+          const stats = doctorStats.get(doctor.id);
+          return (
+            <div key={doctor.id} className={`doctor-card ${!doctor.is_active ? 'inactive' : ''}`}>
+              <div className="doctor-avatar">{doctor.user?.name?.charAt(0) || 'D'}</div>
+              <div className="doctor-info">
+                <h3>{doctor.user?.name || `Doctor ${doctor.id}`}</h3>
+                <p className="doctor-email">{doctor.user?.email}</p>
+
+                {/* Skill badges */}
+                <div className="doctor-skills">
+                  {doctor.specialty && (
+                    <span className="skill-badge specialty-badge" title={doctor.specialty}>
+                      <Stethoscope size={12} />
+                      {doctor.specialty}
+                    </span>
+                  )}
+                  {doctor.is_pediatrics_certified && (
+                    <span className="skill-badge peds-badge" title="Pediatrics certified">
+                      <Baby size={12} />
+                      Pediatrics
+                    </span>
+                  )}
+                  {doctor.can_work_nights && (
+                    <span className="skill-badge night-badge" title="Can work nights">
+                      <Moon size={12} />
+                      Nights
+                    </span>
+                  )}
+                </div>
+
+                {/* Hours tracking */}
+                {stats && (
+                  <div className="doctor-hours-track">
+                    <div className="hours-label">
+                      <Clock size={12} />
+                      <span>{stats.total_hours}h / {stats.max_hours}h</span>
+                      {stats.is_over_limit && (
+                        <span className="over-limit-badge">
+                          <AlertTriangle size={10} />
+                          Over limit
+                        </span>
+                      )}
+                    </div>
+                    <div className="hours-bar-container">
+                      <div
+                        className="hours-bar"
+                        style={{
+                          width: `${Math.min(stats.hours_percentage, 100)}%`,
+                          background: getHoursBarColor(stats),
+                        }}
+                      />
+                    </div>
+                    <div className="assignment-count">
+                      <Activity size={12} />
+                      {stats.assignment_count} assignments
+                    </div>
+                  </div>
                 )}
-                {doctor.is_pediatrics_certified && (
-                  <span className="capability" title="Pediatrics certified">
-                    <Baby size={14} />
+
+                <div className="doctor-meta">
+                  <span className={`badge badge-${doctor.user?.nationality || 'unknown'}`}>
+                    {doctor.user?.nationality === 'saudi' ? 'Saudi' : 'Non-Saudi'}
                   </span>
-                )}
+                  <span className={`badge badge-${doctor.is_active ? 'active' : 'inactive'}`}>
+                    {doctor.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                {doctor.employee_id && <p className="doctor-id">ID: {doctor.employee_id}</p>}
               </div>
-              {doctor.employee_id && <p className="doctor-id">ID: {doctor.employee_id}</p>}
-              {doctor.specialty && <p className="doctor-specialty">{doctor.specialty}</p>}
-            </div>
-            {isAdmin && (
-              <div className="doctor-actions">
-                <button
-                  className="btn-icon"
-                  title="Edit"
-                  onClick={() => handleEditDoctor(doctor)}
-                >
-                  <Edit2 size={16} />
-                </button>
-                {deleteConfirm === doctor.id ? (
-                  <>
+              {isAdmin && (
+                <div className="doctor-actions">
+                  <button
+                    className="btn-icon"
+                    title="Edit"
+                    onClick={() => handleEditDoctor(doctor)}
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  {deleteConfirm === doctor.id ? (
+                    <>
+                      <button
+                        className="btn-icon danger"
+                        title="Confirm delete"
+                        onClick={() => handleDelete(doctor.id)}
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        className="btn-icon"
+                        title="Cancel"
+                        onClick={() => setDeleteConfirm(null)}
+                      >
+                        <X size={16} />
+                      </button>
+                    </>
+                  ) : (
                     <button
                       className="btn-icon danger"
-                      title="Confirm delete"
-                      onClick={() => handleDelete(doctor.id)}
+                      title="Delete"
+                      onClick={() => setDeleteConfirm(doctor.id)}
                     >
-                      <Check size={16} />
+                      <Trash2 size={16} />
                     </button>
-                    <button
-                      className="btn-icon"
-                      title="Cancel"
-                      onClick={() => setDeleteConfirm(null)}
-                    >
-                      <X size={16} />
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="btn-icon danger"
-                    title="Delete"
-                    onClick={() => setDeleteConfirm(doctor.id)}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {filteredDoctors.length === 0 && (

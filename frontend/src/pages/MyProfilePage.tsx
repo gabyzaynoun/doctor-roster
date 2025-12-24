@@ -27,7 +27,9 @@ import {
   Sun,
   Moon,
   Sunset,
+  HelpCircle,
 } from 'lucide-react';
+import { resetOnboarding } from '../components/OnboardingTour';
 import './MyProfilePage.css';
 
 interface ProfileStats {
@@ -355,6 +357,10 @@ export function MyProfilePage() {
           <button className="action-btn" onClick={() => window.location.href = '/'}>
             <User size={20} />
             View Schedule
+          </button>
+          <button className="action-btn action-btn-secondary" onClick={resetOnboarding}>
+            <HelpCircle size={20} />
+            Restart Tour
           </button>
         </div>
       </motion.div>

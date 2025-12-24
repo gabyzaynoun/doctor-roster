@@ -13,6 +13,9 @@ from app.api import (
     swap_requests,
     notifications,
     availability,
+    schedule_templates,
+    marketplace,
+    fairness,
 )
 
 api_router = APIRouter()
@@ -30,3 +33,6 @@ api_router.include_router(coverage_templates.router, prefix="/coverage-templates
 api_router.include_router(swap_requests.router, prefix="/swaps", tags=["swaps"])
 api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(availability.router, prefix="/availability", tags=["availability"])
+api_router.include_router(schedule_templates.router, prefix="/templates", tags=["templates"])
+api_router.include_router(marketplace.router, prefix="/marketplace", tags=["marketplace"])
+api_router.include_router(fairness.router, prefix="/fairness", tags=["fairness"])

@@ -7,8 +7,10 @@ import type { Schedule, Center, Shift, Assignment, Doctor, ValidationResult } fr
 import { ScheduleGrid } from '../components/ScheduleGrid';
 import { ValidationPanel } from '../components/ValidationPanel';
 import { AssignmentModal } from '../components/AssignmentModal';
-import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Wand2, Send, RotateCcw, Archive, ArchiveRestore } from 'lucide-react';
+import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle, Wand2, Send, RotateCcw, Archive, ArchiveRestore, Maximize2, LayoutGrid, Info, Save, FileStack, X } from 'lucide-react';
 import { schedulePublishedCelebration } from '../utils/confetti';
+
+type DensityMode = 'compact' | 'comfortable' | 'spacious';
 
 export function SchedulePage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -38,6 +40,16 @@ export function SchedulePage() {
     centerId: number;
     shiftId: number;
   } | null>(null);
+
+  // UI preferences
+  const [density, setDensity] = useState<DensityMode>('comfortable');
+  const [focusedCenterId, setFocusedCenterId] = useState<number | null>(null);
+
+  // Template modal state
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDescription, setTemplateDescription] = useState('');
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
   // Generate days for the month
   const days = useMemo(() => {
@@ -286,6 +298,49 @@ export function SchedulePage() {
     }
   };
 
+  // Save as template handler
+  const handleSaveAsTemplate = async () => {
+    if (!schedule || !templateName.trim()) return;
+
+    setIsSavingTemplate(true);
+    try {
+      await api.createTemplateFromSchedule({
+        name: templateName.trim(),
+        description: templateDescription.trim() || undefined,
+        source_schedule_id: schedule.id,
+      });
+      toast.success('Template saved successfully!');
+      setShowTemplateModal(false);
+      setTemplateName('');
+      setTemplateDescription('');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to save template');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  // Cycle through density modes
+  const cycleDensity = () => {
+    setDensity(current => {
+      switch (current) {
+        case 'compact': return 'comfortable';
+        case 'comfortable': return 'spacious';
+        case 'spacious': return 'compact';
+      }
+    });
+  };
+
+  // Get density icon and label
+  const getDensityInfo = () => {
+    switch (density) {
+      case 'compact': return { label: 'Compact' };
+      case 'comfortable': return { label: 'Comfortable' };
+      case 'spacious': return { label: 'Spacious' };
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="loading-container">
@@ -321,19 +376,67 @@ export function SchedulePage() {
           </button>
         </div>
 
+        <div className="schedule-controls">
+          {/* Density toggle */}
+          <button
+            onClick={cycleDensity}
+            className="btn-secondary btn-sm"
+            title={`Grid density: ${getDensityInfo().label}`}
+          >
+            <LayoutGrid size={16} />
+            {getDensityInfo().label}
+          </button>
+
+          {/* Focus mode selector */}
+          <select
+            value={focusedCenterId || ''}
+            onChange={(e) => setFocusedCenterId(e.target.value ? parseInt(e.target.value) : null)}
+            className="center-focus-select"
+            title="Focus on a specific center"
+          >
+            <option value="">All Centers</option>
+            {centers.map(center => (
+              <option key={center.id} value={center.id}>
+                {center.code} - {center.name}
+              </option>
+            ))}
+          </select>
+
+          {focusedCenterId && (
+            <button
+              onClick={() => setFocusedCenterId(null)}
+              className="btn-icon"
+              title="Show all centers"
+            >
+              <Maximize2 size={16} />
+            </button>
+          )}
+        </div>
+
         <div className="schedule-actions">
           {validation && (
             <button
               onClick={() => setShowValidation(!showValidation)}
-              className={`btn-validation ${validation.is_valid ? 'valid' : 'invalid'}`}
+              className={`btn-validation ${validation.is_valid ? 'valid' : validation.error_count > 0 ? 'invalid' : 'warning'}`}
+              title={validation.is_valid ? 'Schedule is valid' : `${validation.error_count} errors, ${validation.warning_count} warnings`}
             >
               {validation.is_valid ? (
                 <>
                   <CheckCircle size={16} /> Valid
                 </>
+              ) : validation.error_count > 0 ? (
+                <>
+                  <AlertTriangle size={16} />
+                  <span className="validation-counts">
+                    <span className="error-count">{validation.error_count}</span>
+                    {validation.warning_count > 0 && (
+                      <span className="warning-count">+{validation.warning_count}</span>
+                    )}
+                  </span>
+                </>
               ) : (
                 <>
-                  <AlertTriangle size={16} /> {validation.error_count} errors
+                  <Info size={16} /> {validation.warning_count} warnings
                 </>
               )}
             </button>
@@ -378,6 +481,19 @@ export function SchedulePage() {
             >
               <RotateCcw size={16} />
               Unpublish
+            </button>
+          )}
+
+          {schedule && assignments.length > 0 && (
+            <button
+              onClick={() => {
+                setTemplateName(`${format(new Date(year, month - 1), 'MMMM yyyy')} Template`);
+                setShowTemplateModal(true);
+              }}
+              className="btn-icon"
+              title="Save as template"
+            >
+              <FileStack size={18} />
             </button>
           )}
 
@@ -446,6 +562,8 @@ export function SchedulePage() {
             onCellClick={handleCellClick}
             onAssignmentMove={handleAssignmentMove}
             isDraggable={schedule.status === 'draft'}
+            density={density}
+            focusedCenterId={focusedCenterId}
           />
         </div>
       )}
@@ -464,6 +582,65 @@ export function SchedulePage() {
           onSaved={handleAssignmentSaved}
           onDeleted={handleAssignmentDeleted}
         />
+      )}
+
+      {/* Save as Template Modal */}
+      {showTemplateModal && (
+        <div className="modal-overlay" onClick={() => setShowTemplateModal(false)}>
+          <div className="modal template-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2><FileStack size={20} /> Save as Template</h2>
+              <button className="btn-icon" onClick={() => setShowTemplateModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-content">
+              <p className="modal-description">
+                Save this schedule's assignment pattern as a reusable template.
+                You can apply it to create new schedules quickly.
+              </p>
+              <div className="form-group">
+                <label htmlFor="templateName">Template Name *</label>
+                <input
+                  id="templateName"
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="e.g., December 2025 Pattern"
+                  className="form-control"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="templateDescription">Description (optional)</label>
+                <textarea
+                  id="templateDescription"
+                  value={templateDescription}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                  placeholder="Describe when to use this template..."
+                  className="form-control"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                onClick={() => setShowTemplateModal(false)}
+                disabled={isSavingTemplate}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleSaveAsTemplate}
+                disabled={!templateName.trim() || isSavingTemplate}
+              >
+                <Save size={16} />
+                {isSavingTemplate ? 'Saving...' : 'Save Template'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

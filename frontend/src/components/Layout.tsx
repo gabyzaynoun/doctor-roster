@@ -16,6 +16,8 @@ import {
   Sun,
   Moon,
   UserCircle,
+  ShoppingBag,
+  Scale,
 } from 'lucide-react';
 import { NotificationCenter } from './NotificationCenter';
 
@@ -88,6 +90,22 @@ export function Layout({ children }: LayoutProps) {
           >
             <RefreshCw size={16} />
             Swaps
+          </Link>
+          <Link
+            to="/marketplace"
+            className={`nav-link ${location.pathname === '/marketplace' ? 'active' : ''}`}
+            data-tour="nav-marketplace"
+          >
+            <ShoppingBag size={16} />
+            Marketplace
+          </Link>
+          <Link
+            to="/fairness"
+            className={`nav-link ${location.pathname === '/fairness' ? 'active' : ''}`}
+            data-tour="nav-fairness"
+          >
+            <Scale size={16} />
+            Fairness
           </Link>
           {(user?.role === 'doctor' || user?.role === 'admin') && (
             <Link

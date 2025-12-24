@@ -18,6 +18,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { SwapRequestsPage } from './pages/SwapRequestsPage';
 import { AvailabilityPage } from './pages/AvailabilityPage';
 import { MyProfilePage } from './pages/MyProfilePage';
+import { MarketplacePage } from './pages/MarketplacePage';
+import { FairnessPage } from './pages/FairnessPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -136,6 +138,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MyProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/marketplace"
+        element={
+          <ProtectedRoute>
+            <MarketplacePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/fairness"
+        element={
+          <ProtectedRoute>
+            <FairnessPage />
           </ProtectedRoute>
         }
       />

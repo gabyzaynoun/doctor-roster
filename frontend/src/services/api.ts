@@ -12,6 +12,9 @@ import type {
   ScheduleStats,
   AuditLogListResponse,
   CoverageTemplate,
+  ScheduleTemplate,
+  ShiftPosting,
+  FairnessMetrics,
 } from '../types';
 
 // Use environment variable if set, otherwise default to /api for proxy setup
@@ -458,6 +461,78 @@ class ApiClient {
       params: { hours, limit },
     });
     return { items: response.data as unknown as AuditLogListResponse['items'], total: (response.data as unknown as AuditLogListResponse['items']).length, limit: limit || 50, offset: 0 };
+  }
+
+  // Schedule Templates
+  async getTemplates(): Promise<ScheduleTemplate[]> {
+    const response = await this.client.get<ScheduleTemplate[]>('/templates/');
+    return response.data;
+  }
+
+  async getTemplate(id: number): Promise<ScheduleTemplate> {
+    const response = await this.client.get<ScheduleTemplate>(`/templates/${id}`);
+    return response.data;
+  }
+
+  async createTemplateFromSchedule(data: {
+    name: string;
+    description?: string;
+    source_schedule_id: number;
+  }): Promise<ScheduleTemplate> {
+    const response = await this.client.post<ScheduleTemplate>('/templates/from-schedule', data);
+    return response.data;
+  }
+
+  async updateTemplate(id: number, data: { name?: string; description?: string }): Promise<ScheduleTemplate> {
+    const response = await this.client.put<ScheduleTemplate>(`/templates/${id}`, data);
+    return response.data;
+  }
+
+  async deleteTemplate(id: number): Promise<void> {
+    await this.client.delete(`/templates/${id}`);
+  }
+
+  // Shift Marketplace
+  async getMarketplacePostings(status?: string, type?: string): Promise<ShiftPosting[]> {
+    const response = await this.client.get<ShiftPosting[]>('/marketplace/', {
+      params: { status, posting_type: type },
+    });
+    return response.data;
+  }
+
+  async getMyPostings(): Promise<ShiftPosting[]> {
+    const response = await this.client.get<ShiftPosting[]>('/marketplace/my-postings');
+    return response.data;
+  }
+
+  async createPosting(data: {
+    assignment_id?: number;
+    posting_type: string;
+    message?: string;
+    is_urgent?: boolean;
+  }): Promise<ShiftPosting> {
+    const response = await this.client.post<ShiftPosting>('/marketplace/', data);
+    return response.data;
+  }
+
+  async claimPosting(postingId: number, message?: string): Promise<ShiftPosting> {
+    const response = await this.client.post<ShiftPosting>(`/marketplace/${postingId}/claim`, { message });
+    return response.data;
+  }
+
+  async cancelPosting(postingId: number): Promise<void> {
+    await this.client.post(`/marketplace/${postingId}/cancel`);
+  }
+
+  // Fairness Analytics
+  async getFairnessMetrics(scheduleId: number): Promise<FairnessMetrics> {
+    const response = await this.client.get<FairnessMetrics>(`/fairness/${scheduleId}`);
+    return response.data;
+  }
+
+  async getFairnessByMonth(year: number, month: number): Promise<FairnessMetrics> {
+    const response = await this.client.get<FairnessMetrics>(`/fairness/by-month/${year}/${month}`);
+    return response.data;
   }
 
   // Generic HTTP methods for new features

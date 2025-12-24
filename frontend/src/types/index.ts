@@ -248,3 +248,93 @@ export interface AuditLogListResponse {
   limit: number;
   offset: number;
 }
+
+// Schedule Template types
+export interface PatternEntry {
+  day_of_week: number;
+  center_code: string;
+  shift_code: string;
+  doctor_count: number;
+}
+
+export interface TemplatePattern {
+  patterns: PatternEntry[];
+}
+
+export interface ScheduleTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  pattern_data: TemplatePattern;
+  created_by_id: number;
+  source_schedule_id: number | null;
+  times_used: number;
+  last_used_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Shift Marketplace types
+export type PostingType = 'giveaway' | 'pickup' | 'swap';
+export type PostingStatus = 'open' | 'pending' | 'claimed' | 'cancelled' | 'expired';
+
+export interface PostingDoctorInfo {
+  id: number;
+  name: string;
+  specialty?: string;
+}
+
+export interface PostingAssignmentInfo {
+  id: number;
+  date: string;
+  center_name: string;
+  center_code: string;
+  shift_code: string;
+  shift_name: string;
+  hours: number;
+}
+
+export interface ShiftPosting {
+  id: number;
+  poster_id: number;
+  poster?: PostingDoctorInfo;
+  assignment_id?: number;
+  assignment?: PostingAssignmentInfo;
+  posting_type: PostingType;
+  status: PostingStatus;
+  preferred_date?: string;
+  preferred_center_id?: number;
+  preferred_shift_id?: number;
+  message?: string;
+  bonus_points: number;
+  is_urgent: boolean;
+  claimed_by_id?: number;
+  claimed_by?: PostingDoctorInfo;
+  claimed_at?: string;
+  created_at: string;
+  expires_at?: string;
+}
+
+// Fairness Analytics types
+export interface DoctorFairnessStats {
+  doctor_id: number;
+  doctor_name: string;
+  night_shifts: number;
+  weekend_shifts: number;
+  holiday_shifts: number;
+  total_hours: number;
+  fairness_score: number;
+}
+
+export interface FairnessMetrics {
+  schedule_id: number;
+  year: number;
+  month: number;
+  night_shift_balance: number;
+  weekend_balance: number;
+  holiday_balance: number;
+  hours_balance: number;
+  overall_fairness: number;
+  doctor_stats: DoctorFairnessStats[];
+  recommendations: string[];
+}

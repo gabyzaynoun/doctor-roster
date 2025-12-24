@@ -323,6 +323,20 @@
   transform: scale(1.1);
 }
 
+.action-btn-secondary {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+}
+
+.action-btn-secondary:hover {
+  background: var(--bg-tertiary);
+  border-style: solid;
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .profile-page {
