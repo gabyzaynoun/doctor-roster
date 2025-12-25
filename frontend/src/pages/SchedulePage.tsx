@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import toast from 'react-hot-toast';
-import { DndContext, DragEndEvent, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { api } from '../services/api';
 import type { Schedule, Center, Shift, Assignment, Doctor, ValidationResult, DoctorStats, CoverageGap } from '../types';
 import { ScheduleGrid } from '../components/ScheduleGrid';
@@ -86,6 +86,9 @@ export function SchedulePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showNightShiftsOnly, setShowNightShiftsOnly] = useState(false);
   const [showGapsOnly, setShowGapsOnly] = useState(false);
+
+  // Drag state for overlay preview
+  const [activeDragDoctor, setActiveDragDoctor] = useState<Doctor | null>(null);
 
   // Template modal state
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -298,11 +301,26 @@ export function SchedulePage() {
     }
   };
 
+  // Handle drag start - set active doctor for overlay
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const activeData = active.data.current as { doctor?: Doctor; type?: string };
+    if (activeData?.type === 'new-assignment' && activeData.doctor) {
+      setActiveDragDoctor(activeData.doctor);
+    }
+  };
+
   // Handle drag from sidebar to grid
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveDragDoctor(null); // Clear overlay
 
-    if (!over || !schedule || schedule.status !== 'draft') return;
+    if (!over || !schedule || schedule.status !== 'draft') {
+      if (!over) {
+        toast.error('Drop cancelled - release over a schedule cell');
+      }
+      return;
+    }
 
     const activeData = active.data.current as { doctor?: Doctor; type?: string };
     if (activeData?.type !== 'new-assignment' || !activeData.doctor) return;
@@ -329,7 +347,10 @@ export function SchedulePage() {
         date: date,
       });
 
-      toast.success(`${doctor.user?.name} assigned successfully`);
+      const shift = shifts.find(s => s.id === shiftId);
+      const center = centers.find(c => c.id === centerId);
+      const dateStr = format(new Date(date), 'EEE, MMM d');
+      toast.success(`✓ ${doctor.user?.name} assigned to ${center?.code || 'Center'} - ${dateStr} ${shift?.code || ''}`);
 
       // Reload data
       const assignmentsData = await api.getAssignments({ schedule_id: schedule.id });
@@ -536,6 +557,7 @@ export function SchedulePage() {
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <div className="schedule-page">
@@ -923,9 +945,22 @@ export function SchedulePage() {
           </div>
         )}
 
-        {/* Drag Overlay */}
-        <DragOverlay>
-          {/* This is handled by DoctorSidebar internally */}
+        {/* Drag Overlay - Ghost preview of dragged doctor */}
+        <DragOverlay dropAnimation={{
+          duration: 200,
+          easing: 'ease-out',
+        }}>
+          {activeDragDoctor && (
+            <div className="drag-overlay-card">
+              <div className="drag-overlay-avatar">
+                {activeDragDoctor.user?.name?.split(' ').map(n => n[0]).join('').substring(0, 2) || 'DR'}
+              </div>
+              <div className="drag-overlay-info">
+                <span className="drag-overlay-name">{activeDragDoctor.user?.name}</span>
+                <span className="drag-overlay-hint">Drop on a cell to assign</span>
+              </div>
+            </div>
+          )}
         </DragOverlay>
       </div>
     </DndContext>
