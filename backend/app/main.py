@@ -38,6 +38,21 @@ def init_database():
             print("Database seeding complete!")
         else:
             print(f"Database already has data: {user_count} users, {center_count} centers, {shift_count} shifts")
+
+        # CRITICAL FIX: Ensure all centers have allowed_shifts populated
+        # This fixes the empty grid issue where shifts don't render
+        centers = db.query(Center).all()
+        shifts = db.query(Shift).all()
+        all_shift_codes = [s.code for s in shifts]
+
+        for center in centers:
+            if not center.allowed_shifts or len(center.allowed_shifts) == 0:
+                print(f"Fixing empty allowed_shifts for center: {center.code}")
+                center.allowed_shifts = all_shift_codes
+                db.add(center)
+
+        db.commit()
+        print(f"Verified allowed_shifts for {len(centers)} centers with {len(all_shift_codes)} shifts")
     finally:
         db.close()
 
