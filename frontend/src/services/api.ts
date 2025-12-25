@@ -18,7 +18,13 @@ import type {
 } from '../types';
 
 // Use environment variable if set, otherwise default to /api for proxy setup
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+let API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+
+// CRITICAL: Ensure HTTPS is used in production to avoid mixed content errors
+if (API_BASE_URL.startsWith('http://') && window.location.protocol === 'https:') {
+  API_BASE_URL = API_BASE_URL.replace('http://', 'https://');
+  console.warn('API URL upgraded to HTTPS to avoid mixed content issues');
+}
 
 class ApiClient {
   private client: AxiosInstance;
