@@ -20,11 +20,21 @@ import type {
 // Use environment variable if set, otherwise default to /api for proxy setup
 let API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
+// DEBUG: Log the raw environment variable value
+console.log('[API] Raw VITE_API_URL:', import.meta.env.VITE_API_URL);
+console.log('[API] Initial API_BASE_URL:', API_BASE_URL);
+console.log('[API] Window protocol:', window.location.protocol);
+
 // CRITICAL: Ensure HTTPS is used in production to avoid mixed content errors
+// This handles cases where the env var was baked in as HTTP during build
 if (API_BASE_URL.startsWith('http://') && window.location.protocol === 'https:') {
+  const oldUrl = API_BASE_URL;
   API_BASE_URL = API_BASE_URL.replace('http://', 'https://');
-  console.warn('API URL upgraded to HTTPS to avoid mixed content issues');
+  console.warn('[API] HTTPS UPGRADE:', oldUrl, '->', API_BASE_URL);
 }
+
+// Final URL being used
+console.log('[API] Final API_BASE_URL:', API_BASE_URL);
 
 class ApiClient {
   private client: AxiosInstance;
