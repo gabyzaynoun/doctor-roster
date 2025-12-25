@@ -27,12 +27,17 @@ class Settings(BaseSettings):
         railway_url = os.getenv("RAILWAY_PUBLIC_DOMAIN")
         if railway_url:
             origins.append(f"https://{railway_url}")
-        # Also allow common Railway frontend patterns
-        if self.app_env == "production":
-            origins.extend([
-                "https://doctor-roster-frontend-production.up.railway.app",
-                "https://doctor-roster-frontend.up.railway.app",
-            ])
+        # ALWAYS allow Railway frontend patterns (not just in production mode)
+        # This fixes CORS issues when APP_ENV isn't explicitly set
+        origins.extend([
+            "https://doctor-roster-frontend-production.up.railway.app",
+            "https://doctor-roster-frontend.up.railway.app",
+            "https://doctor-roster.up.railway.app",
+        ])
+        # Check for any Railway environment indicator
+        if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID"):
+            # We're on Railway, allow all Railway subdomains
+            origins.append("https://*.up.railway.app")
         return list(set(origins))  # Remove duplicates
 
     @property

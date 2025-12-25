@@ -77,12 +77,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Debug: Log CORS origins
+print(f"CORS Origins configured: {settings.cors_origins_list}")
+
+# More permissive CORS for Railway deployment
+# allow_origin_regex allows any Railway subdomain
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"https://.*\.up\.railway\.app",  # Allow all Railway subdomains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include API routes
