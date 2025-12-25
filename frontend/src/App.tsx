@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { UndoRedoProvider } from './context/UndoRedoContext';
 import { Layout } from './components/Layout';
 import { OnboardingTour } from './components/OnboardingTour';
 import { KeyboardShortcutsProvider } from './hooks/useKeyboardShortcuts';
@@ -168,9 +169,10 @@ function App() {
       <ThemeProvider>
         <BrowserRouter>
           <AuthProvider>
-            <KeyboardShortcutsProvider>
-              <AppRoutes />
-              <OnboardingTour />
+            <UndoRedoProvider>
+              <KeyboardShortcutsProvider>
+                <AppRoutes />
+                <OnboardingTour />
               <Toaster
                 position="top-right"
                 toastOptions={{
@@ -197,7 +199,8 @@ function App() {
                   },
                 }}
               />
-            </KeyboardShortcutsProvider>
+              </KeyboardShortcutsProvider>
+            </UndoRedoProvider>
           </AuthProvider>
         </BrowserRouter>
       </ThemeProvider>

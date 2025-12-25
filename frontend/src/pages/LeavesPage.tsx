@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import type { Doctor } from '../types';
 import { Calendar, Plus, Check, X, Clock } from 'lucide-react';
@@ -55,6 +56,7 @@ export function LeavesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const doctor = doctors.find(d => d.id === Number(formData.doctor_id));
       await api.createLeave({
         doctor_id: Number(formData.doctor_id),
         leave_type: formData.leave_type,
@@ -64,20 +66,26 @@ export function LeavesPage() {
       });
       setShowAddForm(false);
       setFormData({ doctor_id: '', leave_type: 'annual', start_date: '', end_date: '', notes: '' });
+      toast.success(`✓ Leave request created for ${doctor?.user?.name || 'doctor'}`);
       loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to create leave request');
+      toast.error('Failed to create leave request');
     }
   };
 
   const handleStatusChange = async (leaveId: number, status: 'approved' | 'rejected') => {
     try {
       await api.updateLeave(leaveId, { status });
+      if (status === 'approved') {
+        toast.success('✓ Leave request approved');
+      } else {
+        toast.success('Leave request rejected');
+      }
       loadData();
     } catch (err) {
       console.error(err);
-      alert('Failed to update leave status');
+      toast.error('Failed to update leave status');
     }
   };
 

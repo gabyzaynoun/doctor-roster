@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { api } from '../services/api';
 import './SwapRequestsPage.css';
 
@@ -54,10 +55,18 @@ export function SwapRequestsPage() {
   const respondMutation = useMutation({
     mutationFn: ({ id, accept, message }: { id: number; accept: boolean; message: string }) =>
       api.post(`/swaps/${id}/respond`, { accept, response_message: message }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['swap-requests'] });
       setResponseModal(null);
       setResponseMessage('');
+      if (variables.accept) {
+        toast.success('✓ Swap request accepted');
+      } else {
+        toast.success('Swap request declined');
+      }
+    },
+    onError: () => {
+      toast.error('Failed to respond to swap request');
     },
   });
 
@@ -65,6 +74,10 @@ export function SwapRequestsPage() {
     mutationFn: (id: number) => api.post(`/swaps/${id}/cancel`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['swap-requests'] });
+      toast.success('✓ Swap request cancelled');
+    },
+    onError: () => {
+      toast.error('Failed to cancel swap request');
     },
   });
 

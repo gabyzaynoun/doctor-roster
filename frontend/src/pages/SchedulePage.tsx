@@ -13,6 +13,8 @@ import { DoctorDetailModal } from '../components/DoctorDetailModal';
 import { HelpCenter } from '../components/HelpCenter';
 import { AutoFillPreview } from '../components/AutoFillPreview';
 import { EmptyState } from '../components/EmptyState';
+import { ExportPanel } from '../components/ExportPanel';
+import { UndoRedoButtons, useUndoRedo } from '../context/UndoRedoContext';
 import {
   ChevronLeft,
   ChevronRight,
@@ -34,6 +36,7 @@ import {
   Moon,
   AlertCircle,
   Eye,
+  Download,
 } from 'lucide-react';
 import { schedulePublishedCelebration } from '../utils/confetti';
 
@@ -95,6 +98,12 @@ export function SchedulePage() {
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+
+  // Export panel state
+  const [showExportPanel, setShowExportPanel] = useState(false);
+
+  // Get undo/redo context
+  const { pushAction } = useUndoRedo();
 
   // Drag and drop sensors
   const sensors = useSensors(
@@ -339,7 +348,7 @@ export function SchedulePage() {
     const doctor = activeData.doctor;
 
     try {
-      await api.createAssignment({
+      const newAssignment = await api.createAssignment({
         schedule_id: schedule.id,
         doctor_id: doctor.id,
         center_id: centerId,
@@ -351,6 +360,28 @@ export function SchedulePage() {
       const center = centers.find(c => c.id === centerId);
       const dateStr = format(new Date(date), 'EEE, MMM d');
       toast.success(`✓ ${doctor.user?.name} assigned to ${center?.code || 'Center'} - ${dateStr} ${shift?.code || ''}`);
+
+      // Push to undo stack
+      pushAction({
+        type: 'create_assignment',
+        description: `Assign ${doctor.user?.name} to ${center?.code || 'Center'} on ${dateStr}`,
+        undo: async () => {
+          await api.deleteAssignment(newAssignment.id);
+          const assignmentsData = await api.getAssignments({ schedule_id: schedule.id });
+          setAssignments(assignmentsData);
+        },
+        redo: async () => {
+          await api.createAssignment({
+            schedule_id: schedule.id,
+            doctor_id: doctor.id,
+            center_id: centerId,
+            shift_id: shiftId,
+            date: date,
+          });
+          const assignmentsData = await api.getAssignments({ schedule_id: schedule.id });
+          setAssignments(assignmentsData);
+        },
+      });
 
       // Reload data
       const assignmentsData = await api.getAssignments({ schedule_id: schedule.id });
@@ -573,6 +604,9 @@ export function SchedulePage() {
           </div>
 
           <div className="schedule-controls">
+            {/* Undo/Redo buttons */}
+            <UndoRedoButtons />
+
             {/* Help button */}
             <button
               className="help-button"
@@ -581,6 +615,19 @@ export function SchedulePage() {
             >
               <HelpCircle size={16} />
             </button>
+
+            {/* Export button */}
+            {schedule && (
+              <button
+                className="btn-secondary btn-sm"
+                onClick={() => setShowExportPanel(true)}
+                title="Export schedule (Ctrl+E)"
+                data-export-btn
+              >
+                <Download size={16} />
+                Export
+              </button>
+            )}
 
             {/* Density toggle */}
             <button
@@ -652,7 +699,8 @@ export function SchedulePage() {
                 onClick={() => setShowAutoFillPreview(true)}
                 className="btn-secondary"
                 disabled={isBuilding || isUpdatingStatus}
-                title="Preview auto-fill suggestions (B)"
+                title="Preview auto-fill suggestions (Ctrl+B)"
+                data-autobuild-btn
               >
                 <Wand2 size={16} />
                 {isBuilding ? 'Building...' : 'Auto-Build'}
@@ -883,6 +931,15 @@ export function SchedulePage() {
             doctorStats={doctorStats}
             onConfirm={handleAutoBuild}
             onCancel={() => setShowAutoFillPreview(false)}
+          />
+        )}
+
+        {/* Export Panel */}
+        {showExportPanel && schedule && (
+          <ExportPanel
+            scheduleId={schedule.id}
+            scheduleName={format(new Date(year, month - 1), 'MMMM yyyy')}
+            onClose={() => setShowExportPanel(false)}
           />
         )}
 
