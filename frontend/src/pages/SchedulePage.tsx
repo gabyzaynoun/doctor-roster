@@ -350,6 +350,9 @@ export function SchedulePage() {
 
     const doctor = activeData.doctor;
 
+    // Debug logging
+    console.log('Creating assignment:', { schedule_id: schedule.id, doctor_id: doctor.id, center_id: centerId, shift_id: shiftId, date });
+
     try {
       const newAssignment = await api.createAssignment({
         schedule_id: schedule.id,
@@ -359,9 +362,13 @@ export function SchedulePage() {
         date: date,
       });
 
+      console.log('Assignment created successfully:', newAssignment);
+
       const shift = shifts.find(s => s.id === shiftId);
       const center = centers.find(c => c.id === centerId);
       const dateStr = format(new Date(date), 'EEE, MMM d');
+
+      // Show success toast
       toast.success(`✓ ${doctor.user?.name} assigned to ${center?.code || 'Center'} - ${dateStr} ${shift?.code || ''}`);
 
       // Push to undo stack
@@ -400,9 +407,10 @@ export function SchedulePage() {
       });
       setDoctorStats(statsMap);
       setCoverageGaps(statsData.coverage_stats.gaps || []);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to create assignment');
+    } catch (err: any) {
+      console.error('Assignment creation failed:', err);
+      const errorMessage = err?.response?.data?.detail || err?.message || 'Failed to create assignment';
+      toast.error(`Assignment failed: ${errorMessage}`);
     }
   };
 

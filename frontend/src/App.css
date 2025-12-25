@@ -7095,8 +7095,10 @@ label {
 }
 
 .row-header .shift-time {
-  font-size: 0.7rem;
-  color: var(--text-muted);
+  font-size: 0.75rem;
+  color: var(--text-secondary);  /* Brighter than text-muted for better visibility */
+  font-weight: 500;
+  opacity: 0.9;
 }
 
 /* Shift type colors in row headers */
@@ -7181,19 +7183,21 @@ label {
   color: var(--text-muted);
 }
 
-/* Assignment chip improvements */
+/* Assignment chip improvements - LARGER SIZE for readability */
 .assignment-chip {
-  padding: 0.25rem 0.5rem;
+  padding: 0.35rem 0.6rem;
   border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.9rem;  /* Increased from 0.75rem (~14px) */
+  font-weight: 700;
   cursor: grab;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
+  min-width: 34px;
+  min-height: 26px;
+  letter-spacing: 0.5px;
 }
 
 .assignment-chip:hover {
