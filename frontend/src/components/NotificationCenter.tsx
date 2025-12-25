@@ -29,10 +29,18 @@ export function NotificationCenter() {
   const { data, isLoading } = useQuery<NotificationListResponse>({
     queryKey: ['notifications'],
     queryFn: async (): Promise<NotificationListResponse> => {
-      const response = await api.get<NotificationListResponse>('/notifications');
-      return response.data;
+      console.log('[NotificationCenter] Fetching notifications...');
+      try {
+        const response = await api.get<NotificationListResponse>('/notifications');
+        console.log('[NotificationCenter] Success:', response.data);
+        return response.data;
+      } catch (error: any) {
+        console.error('[NotificationCenter] Error:', error?.message, error?.config?.baseURL, error?.config?.url);
+        throw error;
+      }
     },
     refetchInterval: 30000, // Refresh every 30 seconds
+    retry: false, // Disable retries to prevent cached HTTP URL retries
   });
 
   const markReadMutation = useMutation({

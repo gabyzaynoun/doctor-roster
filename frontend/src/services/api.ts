@@ -553,6 +553,7 @@ class ApiClient {
 
   // Generic HTTP methods for new features
   async get<T>(url: string, config?: Parameters<AxiosInstance['get']>[1]): Promise<{ data: T }> {
+    console.log('[API.get] Request URL:', url, 'BaseURL:', this.client.defaults.baseURL);
     return this.client.get<T>(url, config);
   }
 
