@@ -269,12 +269,17 @@ export function ScheduleGrid({
     if (!assignment) return;
 
     // Parse the drop target ID (format: "cell-{date}-{centerId}-{shiftId}")
+    // Example: "cell-2025-01-15-1-2" where date is "2025-01-15"
     const dropId = over.id as string;
     if (!dropId.startsWith('cell-')) return;
 
-    const [, date, centerIdStr, shiftIdStr] = dropId.split('-');
-    const newCenterId = parseInt(centerIdStr);
-    const newShiftId = parseInt(shiftIdStr);
+    const parts = dropId.split('-');
+    // parts = ["cell", "2025", "01", "15", "1", "2"]
+    if (parts.length < 6) return;
+
+    const date = `${parts[1]}-${parts[2]}-${parts[3]}`;
+    const newCenterId = parseInt(parts[4]);
+    const newShiftId = parseInt(parts[5]);
 
     // Check if it's being dropped in the same cell
     if (

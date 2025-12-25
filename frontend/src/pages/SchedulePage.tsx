@@ -335,15 +335,18 @@ export function SchedulePage() {
     if (activeData?.type !== 'new-assignment' || !activeData.doctor) return;
 
     // Parse the drop target ID (format: "cell-{date}-{centerId}-{shiftId}")
+    // Example: "cell-2025-01-15-1-2" where date is "2025-01-15", centerId is 1, shiftId is 2
     const dropId = over.id as string;
     if (!dropId.startsWith('cell-')) return;
 
     const parts = dropId.split('-');
-    if (parts.length < 4) return;
+    // parts = ["cell", "2025", "01", "15", "1", "2"]
+    if (parts.length < 6) return;
 
-    const date = parts[1];
-    const centerId = parseInt(parts[2]);
-    const shiftId = parseInt(parts[3]);
+    // Date is parts[1] through parts[3] joined back together
+    const date = `${parts[1]}-${parts[2]}-${parts[3]}`;
+    const centerId = parseInt(parts[4]);
+    const shiftId = parseInt(parts[5]);
 
     const doctor = activeData.doctor;
 
