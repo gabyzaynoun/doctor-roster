@@ -36,11 +36,14 @@ export function NotificationCenter() {
         return response.data;
       } catch (error: any) {
         console.error('[NotificationCenter] Error:', error?.message, error?.config?.baseURL, error?.config?.url);
-        throw error;
+        // Return empty data instead of throwing to prevent error flood
+        return { items: [], total: 0, unread_count: 0 };
       }
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
-    retry: false, // Disable retries to prevent cached HTTP URL retries
+    refetchInterval: 60000, // Slow down polling to reduce error spam
+    retry: false,
+    // Only fetch when user is authenticated
+    enabled: !!localStorage.getItem('token'),
   });
 
   const markReadMutation = useMutation({
