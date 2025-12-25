@@ -29,6 +29,15 @@ const SPECIALTY_COLORS: Record<string, { bg: string; text: string }> = {
   'default': { bg: 'rgba(59, 130, 246, 0.9)', text: '#ffffff' },
 };
 
+interface CoverageGap {
+  date: string;
+  center: string;
+  shift: string;
+  required: number;
+  actual: number;
+  gap: number;
+}
+
 interface ScheduleGridProps {
   days: Date[];
   centers: Center[];
@@ -40,6 +49,7 @@ interface ScheduleGridProps {
   isDraggable?: boolean;
   density?: 'compact' | 'comfortable' | 'spacious';
   focusedCenterId?: number | null;
+  coverageGaps?: CoverageGap[];
 }
 
 interface DraggableAssignmentProps {
@@ -56,6 +66,8 @@ interface DroppableCellProps {
   shiftId: number;
   dayClass: string;
   hasAssignment: boolean;
+  hasGap: boolean;
+  shiftType: string;
   children: React.ReactNode;
   onClick: () => void;
 }
@@ -100,6 +112,8 @@ function DroppableCell({
   id,
   dayClass,
   hasAssignment,
+  hasGap,
+  shiftType,
   children,
   onClick,
 }: DroppableCellProps) {
@@ -107,12 +121,20 @@ function DroppableCell({
     id,
   });
 
+  const cellClasses = [
+    'grid-cell',
+    'day-cell',
+    dayClass,
+    hasAssignment ? 'has-assignment' : '',
+    hasGap && !hasAssignment ? 'has-gap' : '',
+    shiftType,
+    isOver ? 'drop-target-active' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <div
       ref={setNodeRef}
-      className={`grid-cell day-cell ${dayClass} ${hasAssignment ? 'has-assignment' : ''} ${
-        isOver ? 'drop-target-active' : ''
-      }`}
+      className={cellClasses}
       onClick={onClick}
     >
       {children}
@@ -131,6 +153,7 @@ export function ScheduleGrid({
   isDraggable = true,
   density = 'comfortable',
   focusedCenterId = null,
+  coverageGaps = [],
 }: ScheduleGridProps) {
   const [activeAssignment, setActiveAssignment] = useState<Assignment | null>(null);
 
@@ -221,6 +244,13 @@ export function ScheduleGrid({
     return '';
   };
 
+  // Check if a cell has a coverage gap
+  const hasCoverageGap = (date: string, centerCode: string, shiftCode: string): boolean => {
+    return coverageGaps.some(
+      gap => gap.date === date && gap.center === centerCode && gap.shift === shiftCode
+    );
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const assignment = (active.data.current as { assignment: Assignment })?.assignment;
@@ -293,7 +323,7 @@ export function ScheduleGrid({
             {shifts
               .filter((shift) => center.allowed_shifts.includes(shift.code))
               .map((shift, shiftIndex) => (
-                <div key={`${center.id}-${shift.id}`} className={`grid-row ${shiftIndex % 2 === 1 ? 'row-alt' : ''}`}>
+                <div key={`${center.id}-${shift.id}`} className={`grid-row ${shiftIndex % 2 === 1 ? 'row-alt' : ''} row-${getShiftColorClass(shift)}`}>
                   {/* Row header */}
                   <div className="grid-cell row-header">
                     <span className={`shift-code ${getShiftColorClass(shift)}`}>
@@ -319,6 +349,8 @@ export function ScheduleGrid({
                           shiftId={shift.id}
                           dayClass={getDayClass(day)}
                           hasAssignment={cellAssignments.length > 0}
+                          hasGap={hasCoverageGap(dateStr, center.code, shift.code)}
+                          shiftType={getShiftColorClass(shift)}
                           onClick={() => onCellClick(dateStr, center.id, shift.id)}
                         >
                           {cellAssignments.map((assignment) => (
@@ -334,12 +366,20 @@ export function ScheduleGrid({
                       );
                     }
 
+                    const hasGap = hasCoverageGap(dateStr, center.code, shift.code);
+                    const cellClasses = [
+                      'grid-cell',
+                      'day-cell',
+                      getDayClass(day),
+                      cellAssignments.length > 0 ? 'has-assignment' : '',
+                      hasGap && cellAssignments.length === 0 ? 'has-gap' : '',
+                      getShiftColorClass(shift),
+                    ].filter(Boolean).join(' ');
+
                     return (
                       <div
                         key={cellKey}
-                        className={`grid-cell day-cell ${getDayClass(day)} ${
-                          cellAssignments.length > 0 ? 'has-assignment' : ''
-                        }`}
+                        className={cellClasses}
                         onClick={() => onCellClick(dateStr, center.id, shift.id)}
                       >
                         {cellAssignments.map((assignment) => {
